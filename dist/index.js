@@ -52,8 +52,8 @@ const VERDICTS = Object.freeze({
  * @returns {'DO_NOT_DEPLOY' | 'OPTIMIZE' | 'SAFE'}
  */
 function decide(costPerTx, dropRate) {
-  if (costPerTx > 5 && dropRate > 0.5) return VERDICTS.DO_NOT_DEPLOY;
-  if (costPerTx > 3)                   return VERDICTS.OPTIMIZE;
+  if (costPerTx > 1)   return VERDICTS.DO_NOT_DEPLOY;
+  if (costPerTx > 0.5) return VERDICTS.OPTIMIZE;
   return VERDICTS.SAFE;
 }
 
