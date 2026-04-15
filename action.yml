@@ -21,6 +21,10 @@ inputs:
     description: 'Relative path to the directory containing foundry.toml'
     required: false
     default: '.'
+  alchemy_rpc_url:
+    description: 'Alchemy (or any) RPC URL for mainnet fork — enables realistic gas measurement against live state'
+    required: false
+    default: ''
 
 outputs:
   verdict:

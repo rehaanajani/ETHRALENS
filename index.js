@@ -30,12 +30,17 @@ async function run() {
     const githubToken    = core.getInput('github_token',       { required: true });
     const openrouterKey  = core.getInput('openrouter_api_key') || '';
     const forgePath      = core.getInput('forge_test_path')    || '.';
+    const alchemyRpcUrl  = core.getInput('alchemy_rpc_url')    || '';
 
     // ── Step 1: Run `forge test --gas-report` ───────────────────────────────
     core.startGroup('⛽ Running forge test --gas-report');
+    const forgeCmd = alchemyRpcUrl
+      ? `forge test --gas-report --fork-url ${alchemyRpcUrl}`
+      : 'forge test --gas-report';
+    core.info(`Command: ${alchemyRpcUrl ? 'forge test --gas-report --fork-url <RPC>' : forgeCmd}`);
     let forgeOutput = '';
     try {
-      forgeOutput = execSync('forge test --gas-report 2>&1', {
+      forgeOutput = execSync(`${forgeCmd} 2>&1`, {
         cwd     : forgePath,
         encoding: 'utf8',
         maxBuffer: 10 * 1024 * 1024, // 10 MB
