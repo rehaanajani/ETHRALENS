@@ -7,7 +7,7 @@ contract Bad {
     uint public value;
 
     function badSet(uint x) public {
-        for (uint i = 0; i < 20; i++) {
+        for (uint i = 0; i < 200; i++) {
             value = x;
         }
     }
