@@ -26,6 +26,10 @@ async function fetchGasPrice(apiKey) {
   const data = await res.json();
 
   if (data.status !== '1' || !data.result?.ProposeGasPrice) {
+    if (data.message === 'NOTOK') {
+      console.warn(`⚠️ Etherscan warning: ${data.result}. Falling back to 15 Gwei.`);
+      return 15.0;
+    }
     throw new Error(`Etherscan GasOracle error: ${data.message || JSON.stringify(data)}`);
   }
 
