@@ -27,6 +27,9 @@ jobs:
           mkdir -p lib
           git clone https://github.com/foundry-rs/forge-std lib/forge-std --depth 1 --quiet
 
+      - name: Debug — raw forge output
+        run: forge test --gas-report 2>&1 || true
+
       - name: Run ETHRALENS Autopilot
         uses: ./                          # Uses the action from THIS repo
         with:
