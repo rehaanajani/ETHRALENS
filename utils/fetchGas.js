@@ -1,6 +1,6 @@
 'use strict';
 
-const ETHERSCAN_API = 'https://api.etherscan.io/api';
+const ETHERSCAN_API = 'https://api.etherscan.io/v2/api'; // V2 — V1 is deprecated
 
 /**
  * Fetches the current "average" (ProposeGasPrice) gas price from Etherscan.
@@ -10,7 +10,8 @@ const ETHERSCAN_API = 'https://api.etherscan.io/api';
  * @throws If the API returns an error or unexpected structure
  */
 async function fetchGasPrice(apiKey) {
-  const url = `${ETHERSCAN_API}?module=gastracker&action=gasoracle&apikey=${apiKey}`;
+  // V2 API requires chainid parameter (1 = Ethereum mainnet)
+  const url = `${ETHERSCAN_API}?chainid=1&module=gastracker&action=gasoracle&apikey=${apiKey}`;
 
   let res;
   try {
