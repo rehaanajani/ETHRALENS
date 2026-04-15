@@ -23,11 +23,9 @@ jobs:
           version: nightly
 
       - name: Install forge-std
-        run: forge install foundry-rs/forge-std --no-commit
-
-      - name: Install Contract Dependencies
-        run: forge install
-        continue-on-error: true
+        run: |
+          mkdir -p lib
+          git clone https://github.com/foundry-rs/forge-std lib/forge-std --depth 1 --quiet
 
       - name: Run ETHRALENS Autopilot
         uses: ./                          # Uses the action from THIS repo
