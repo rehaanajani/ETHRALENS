@@ -1,0 +1,188 @@
+'use strict';
+
+// ─── GitHub Actions SDK ───────────────────────────────────────────────────────
+const core   = require('@actions/core');
+const github = require('@actions/github');
+
+// ─── Node built-ins ──────────────────────────────────────────────────────────
+const { execSync } = require('child_process');
+
+// ─── Engine ──────────────────────────────────────────────────────────────────
+const { parseGasReport }    = require('./engine/gas');
+const { computeCostUSD }    = require('./engine/cost');
+const { simulate }          = require('./engine/simulate');
+const { assessRisk }        = require('./engine/risk');
+const { decide, VERDICTS }  = require('./engine/decision');
+
+// ─── Utils ───────────────────────────────────────────────────────────────────
+const { fetchGasPrice }     = require('./utils/fetchGas');
+const { fetchETHPrice }     = require('./utils/fetchETH');
+const { fetchAIExplanation} = require('./utils/fetchAI');
+const { formatReport }      = require('./utils/formatter');
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function run() {
+  try {
+
+    // ── Inputs ──────────────────────────────────────────────────────────────
+    const etherscanKey   = core.getInput('etherscan_api_key',  { required: true });
+    const githubToken    = core.getInput('github_token',       { required: true });
+    const openrouterKey  = core.getInput('openrouter_api_key') || '';
+    const forgePath      = core.getInput('forge_test_path')    || '.';
+
+    // ── Step 1: Run `forge test --gas-report` ───────────────────────────────
+    core.startGroup('⛽ Running forge test --gas-report');
+    let forgeOutput = '';
+    try {
+      forgeOutput = execSync('forge test --gas-report 2>&1', {
+        cwd     : forgePath,
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024, // 10 MB
+      });
+    } catch (err) {
+      // forge exits non-zero when some tests fail but still emits gas data
+      forgeOutput = err.stdout || err.message || '';
+      if (!forgeOutput.toLowerCase().includes('gas')) {
+        throw new Error(`forge test produced no gas output.\n\n${forgeOutput}`);
+      }
+      core.warning('Some forge tests failed, but gas report was captured.');
+    }
+    core.info(forgeOutput);
+    core.endGroup();
+
+    // ── Step 2: Parse gas report ────────────────────────────────────────────
+    const gasMap = parseGasReport(forgeOutput);
+
+    if (Object.keys(gasMap).length === 0) {
+      core.setFailed(
+        'ETHRALENS: No gas data found. Make sure your Foundry project emits a gas report.\n' +
+        'Check that `forge test --gas-report` runs correctly in the repo.'
+      );
+      return;
+    }
+
+    // Sort functions by gas (descending) — worst-case first
+    const topFunctions = Object.entries(gasMap).sort((a, b) => b[1] - a[1]);
+    const [worstFn, worstGas] = topFunctions[0];
+
+    core.info(`📊 Parsed ${topFunctions.length} function(s) from gas report`);
+    core.info(`   Worst function: ${worstFn} @ ${worstGas.toLocaleString()} gas`);
+
+    // ── Step 3: Fetch live market data ──────────────────────────────────────
+    core.startGroup('📡 Fetching live market data');
+    const [gasPriceGwei, ethPriceUSD] = await Promise.all([
+      fetchGasPrice(etherscanKey),
+      fetchETHPrice(),
+    ]);
+    core.info(`   Gas Price : ${gasPriceGwei} Gwei`);
+    core.info(`   ETH Price : $${ethPriceUSD.toLocaleString()}`);
+    core.endGroup();
+
+    // ── Step 4: Compute cost per transaction ────────────────────────────────
+    const costPerTx = computeCostUSD(worstGas, gasPriceGwei, ethPriceUSD);
+    core.info(`💰 Cost per tx (worst-case): $${costPerTx.toFixed(4)}`);
+
+    // ── Step 5: Simulate at scale ────────────────────────────────────────────
+    const simulation = simulate(costPerTx);
+    core.info(`📈 Monthly cost @ scale: $${simulation.monthlyCost.toFixed(2)}`);
+
+    // ── Step 6: Risk assessment ─────────────────────────────────────────────
+    const risk = assessRisk(costPerTx);
+    core.info(`🔍 Risk: ${risk.riskLevel} | Drop-off: ${(risk.dropRate * 100).toFixed(0)}%`);
+
+    // ── Step 7: Decision ────────────────────────────────────────────────────
+    const verdict = decide(costPerTx, risk.dropRate);
+    core.info(`⚖️  Verdict: ${verdict}`);
+
+    // ── Step 8 (optional): AI explanation ───────────────────────────────────
+    let aiNote = null;
+    if (openrouterKey) {
+      core.startGroup('🤖 Requesting AI analysis (Mistral)');
+      aiNote = await fetchAIExplanation(
+        { verdict, costPerTx, riskLevel: risk.riskLevel, dropRate: risk.dropRate, worstFn, worstGas },
+        openrouterKey
+      );
+      if (aiNote) core.info(aiNote);
+      else         core.info('AI analysis unavailable (skipped).');
+      core.endGroup();
+    }
+
+    // ── Step 9: Format report ───────────────────────────────────────────────
+    const report = formatReport({
+      costPerTx,
+      simulation,
+      risk,
+      verdict,
+      gasData     : { gasPriceGwei, ethPriceUSD },
+      topFunctions: topFunctions.slice(0, 10), // Cap at 10 rows
+      aiNote,
+    });
+
+    core.info('\n' + report);
+
+    // ── Step 10: Post PR comment ─────────────────────────────────────────────
+    const ctx = github.context;
+    const prNumber = ctx.payload?.pull_request?.number;
+
+    if (prNumber) {
+      const octokit = github.getOctokit(githubToken);
+
+      // Delete any previous ETHRALENS comment to keep the PR clean
+      try {
+        const { data: comments } = await octokit.rest.issues.listComments({
+          owner       : ctx.repo.owner,
+          repo        : ctx.repo.repo,
+          issue_number: prNumber,
+          per_page    : 100,
+        });
+        for (const comment of comments) {
+          if (comment.body?.startsWith('## ⛽ ETHRALENS AUTOPILOT')) {
+            await octokit.rest.issues.deleteComment({
+              owner     : ctx.repo.owner,
+              repo      : ctx.repo.repo,
+              comment_id: comment.id,
+            });
+          }
+        }
+      } catch {
+        // Non-fatal — old comment cleanup is best-effort
+      }
+
+      await octokit.rest.issues.createComment({
+        owner       : ctx.repo.owner,
+        repo        : ctx.repo.repo,
+        issue_number: prNumber,
+        body        : report,
+      });
+      core.info('✅ PR comment posted.');
+    } else {
+      core.info('ℹ️  Not running on a PR — skipping comment.');
+    }
+
+    // ── Step 11: Set outputs ─────────────────────────────────────────────────
+    core.setOutput('verdict',     verdict);
+    core.setOutput('cost_per_tx', costPerTx.toFixed(4));
+
+    // ── Step 12: Fail CI if verdict is DO NOT DEPLOY ─────────────────────────
+    if (verdict === VERDICTS.DO_NOT_DEPLOY) {
+      core.setFailed(
+        `❌ ETHRALENS: Contract is NOT economically viable.\n` +
+        `   Cost per tx: $${costPerTx.toFixed(4)} | Drop-off: ${(risk.dropRate * 100).toFixed(0)}%\n` +
+        `   Fix gas usage in \`${worstFn}\` before deploying.`
+      );
+    } else if (verdict === VERDICTS.OPTIMIZE) {
+      core.warning(
+        `⚠️  ETHRALENS: Contract needs optimization.\n` +
+        `   Cost per tx: $${costPerTx.toFixed(4)} — target below $3.00.`
+      );
+    } else {
+      core.info(`✅ ETHRALENS: Contract is economically SAFE. Cost per tx: $${costPerTx.toFixed(4)}`);
+    }
+
+  } catch (err) {
+    core.setFailed(`ETHRALENS failed unexpectedly: ${err.message}`);
+  }
+}
+
+run();

@@ -1,0 +1,33 @@
+name: 'ETHRALENS'
+description: 'Autopilot for Smart Contract Economics — gas analysis, cost simulation, and deployment risk scoring.'
+author: 'ETHRALENS'
+
+branding:
+  icon: 'zap'
+  color: 'yellow'
+
+inputs:
+  etherscan_api_key:
+    description: 'Etherscan API key for live gas price data'
+    required: true
+  github_token:
+    description: 'GitHub token for posting PR comments'
+    required: true
+  openrouter_api_key:
+    description: 'OpenRouter API key for AI explanation via Mistral (optional)'
+    required: false
+    default: ''
+  forge_test_path:
+    description: 'Relative path to the directory containing foundry.toml'
+    required: false
+    default: '.'
+
+outputs:
+  verdict:
+    description: 'Final deployment verdict: SAFE, OPTIMIZE, or DO_NOT_DEPLOY'
+  cost_per_tx:
+    description: 'Estimated worst-case cost per transaction in USD'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

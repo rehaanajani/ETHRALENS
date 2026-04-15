@@ -1,0 +1,35 @@
+name: ETHRALENS Gas Analysis
+
+on:
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ethralens:
+    name: Smart Contract Economic Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Install Contract Dependencies
+        run: forge install
+        continue-on-error: true
+
+      - name: Run ETHRALENS Autopilot
+        uses: ./                          # Uses the action from THIS repo
+        with:
+          etherscan_api_key:   ${{ secrets.ETHERSCAN_API_KEY }}
+          github_token:        ${{ secrets.GITHUB_TOKEN }}
+          openrouter_api_key:  ${{ secrets.OPENROUTER_API_KEY }}
+          forge_test_path:     '.'
