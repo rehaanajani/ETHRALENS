@@ -6,6 +6,7 @@ pragma solidity ^0.8.20;
  * @notice A minimal ETH vault used as the ETHRALENS gas analysis target.
  *         Intentionally written without micro-optimizations so the analyzer
  *         has something interesting to report on.
+ * @dev v2 — added emergencyWithdraw for owner
  */
 contract SimpleVault {
     mapping(address => uint256) public balances;
@@ -14,6 +15,7 @@ contract SimpleVault {
 
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
+    event EmergencyWithdraw(address indexed owner, uint256 amount);
 
     constructor() {
         owner = msg.sender;
@@ -33,6 +35,15 @@ contract SimpleVault {
         (bool ok, ) = msg.sender.call{value: amount}("");
         require(ok, "Transfer failed");
         emit Withdrawn(msg.sender, amount);
+    }
+
+    function emergencyWithdraw() external {
+        require(msg.sender == owner, "Not owner");
+        uint256 amount = address(this).balance;
+        totalDeposits = 0;
+        (bool ok, ) = owner.call{value: amount}("");
+        require(ok, "Transfer failed");
+        emit EmergencyWithdraw(owner, amount);
     }
 
     function getBalance(address user) external view returns (uint256) {
