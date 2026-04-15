@@ -47,11 +47,21 @@ contract SimpleVaultTest is Test {
         assertEq(vault.getBalance(alice), 1 ether);
     }
 
-    function testFail_WithdrawMoreThanBalance() public {
+    function test_WithdrawMoreThanBalance_Reverts() public {
         vm.prank(alice);
         vault.deposit{value: 1 ether}();
 
         vm.prank(alice);
-        vault.withdraw(2 ether); // Should revert
+        vm.expectRevert(bytes("Insufficient balance"));
+        vault.withdraw(2 ether);
+    }
+
+    function test_EmergencyWithdraw() public {
+        vm.prank(alice);
+        vault.deposit{value: 1 ether}();
+
+        // Only owner can call
+        vault.emergencyWithdraw();
+        assertEq(vault.totalDeposits(), 0);
     }
 }
