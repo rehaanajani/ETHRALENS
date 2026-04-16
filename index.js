@@ -128,42 +128,21 @@ async function run() {
     core.info('\n' + report);
 
     // ── Step 10: Post PR comment ─────────────────────────────────────────────
-    const ctx = github.context;
-    const prNumber = ctx.payload?.pull_request?.number;
-
-    if (prNumber) {
-      const octokit = github.getOctokit(githubToken);
-
-      // Delete any previous ETHRALENS comment to keep the PR clean
-      try {
-        const { data: comments } = await octokit.rest.issues.listComments({
-          owner       : ctx.repo.owner,
-          repo        : ctx.repo.repo,
-          issue_number: prNumber,
-          per_page    : 100,
-        });
-        for (const comment of comments) {
-          if (comment.body?.startsWith('## ⛽ ETHRALENS AUTOPILOT')) {
-            await octokit.rest.issues.deleteComment({
-              owner     : ctx.repo.owner,
-              repo      : ctx.repo.repo,
-              comment_id: comment.id,
-            });
-          }
-        }
-      } catch {
-        // Non-fatal — old comment cleanup is best-effort
-      }
+    try {
+      const github = require("@actions/github");
+      const token = core.getInput("github_token");
+      const octokit = github.getOctokit(token);
+      const context = github.context;
 
       await octokit.rest.issues.createComment({
-        owner       : ctx.repo.owner,
-        repo        : ctx.repo.repo,
-        issue_number: prNumber,
-        body        : report,
+        issue_number: context.issue.number,
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        body: report
       });
       core.info('✅ PR comment posted.');
-    } else {
-      core.info('ℹ️  Not running on a PR — skipping comment.');
+    } catch (e) {
+      console.log("Failed to post PR comment", e.message);
     }
 
     // ── Step 11: Set outputs ─────────────────────────────────────────────────
