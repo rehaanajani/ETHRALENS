@@ -48,8 +48,9 @@ Be specific. No generic advice.`;
     });
 
     if (!res.ok) {
-      console.warn(`[ETHRALENS AI] NVIDIA NIM HTTP ${res.status} — using deterministic fallback.`);
-      return 'AI failed — using deterministic fallback.';
+      const errorText = await res.text();
+      console.warn(`[ETHRALENS AI] NVIDIA NIM HTTP ${res.status}: ${errorText}`);
+      return `*(🤖 NIM Error)*  \nAPI rejected request (HTTP ${res.status}). Verify your NVIDIA API key is active.`;
     }
 
     const data = await res.json();
@@ -60,10 +61,10 @@ Be specific. No generic advice.`;
       return text;
     }
 
-    return 'AI returned empty response.';
+    return '*(🤖 NIM Error)*  \nAI returned empty response.';
   } catch (err) {
-    console.warn(`[ETHRALENS AI] NVIDIA NIM error: ${err.message} — using deterministic fallback.`);
-    return 'AI failed — using deterministic fallback.';
+    console.warn(`[ETHRALENS AI] NVIDIA NIM error: ${err.message}`);
+    return `*(🤖 NIM Error)*  \n${err.message}`;
   }
 }
 
