@@ -28,7 +28,7 @@ async function run() {
     // ── Inputs ──────────────────────────────────────────────────────────────
     const etherscanKey   = core.getInput('etherscan_api_key',  { required: true });
     const githubToken    = core.getInput('github_token',       { required: true });
-    const openrouterKey  = core.getInput('openrouter_api_key') || '';
+    const nvidiaKey      = core.getInput('nvidia_api_key')      || '';
     const forgePath      = core.getInput('forge_test_path')    || '.';
     const alchemyRpcUrl  = core.getInput('alchemy_rpc_url')    || '';
 
@@ -102,14 +102,15 @@ async function run() {
 
     // ── Step 8 (optional): AI explanation ───────────────────────────────────
     let aiNote = null;
-    if (openrouterKey) {
-      core.startGroup('🤖 Requesting AI analysis (OpenRouter)');
-      aiNote = await fetchAIExplanation(
-        { verdict, costPerTx, riskLevel: risk.riskLevel, dropRate: risk.dropRate, worstFn, worstGas },
-        openrouterKey
-      );
+    if (nvidiaKey) {
+      core.startGroup('🤖 Requesting AI analysis (NVIDIA NIM)');
+      aiNote = await fetchAIExplanation({
+        functionName : worstFn,
+        gasUsed      : worstGas,
+        costUSD      : costPerTx,
+        apiKey       : nvidiaKey,
+      });
       if (aiNote) core.info(aiNote);
-      else         core.info('AI analysis unavailable (skipped).');
       core.endGroup();
     }
 

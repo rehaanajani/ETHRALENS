@@ -35,6 +35,6 @@ jobs:
         with:
           etherscan_api_key:   ${{ secrets.ETHERSCAN_API_KEY }}
           github_token:        ${{ secrets.GITHUB_TOKEN }}
-          openrouter_api_key:  ${{ secrets.OPENROUTER_API_KEY }}
+          nvidia_api_key:      ${{ secrets.NVIDIA_API_KEY }}
           alchemy_rpc_url:     ${{ secrets.ALCHEMY_RPC_URL }}
           forge_test_path:     '.'

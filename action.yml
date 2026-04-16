@@ -13,8 +13,8 @@ inputs:
   github_token:
     description: 'GitHub token for posting PR comments'
     required: true
-  openrouter_api_key:
-    description: 'OpenRouter API key for AI explanation via Mistral (optional)'
+  nvidia_api_key:
+    description: 'NVIDIA NIM API key for AI explanation via LLaMA 3 (optional)'
     required: false
     default: ''
   forge_test_path:
