@@ -66,38 +66,68 @@ jobs:
       - name: Run ETHRALENS
         uses: YOUR_ORG/ethralens-action@v1
         with:
-          etherscan_api_key:  ${{ secrets.ETHERSCAN_API_KEY }}
-          github_token:       ${{ secrets.GITHUB_TOKEN }}
-          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}  # optional
-          forge_test_path:    '.'
+          etherscan_api_key: ${{ secrets.ETHERSCAN_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          nvidia_api_key: ${{ secrets.NVIDIA_API_KEY }} # optional
+          forge_test_path: '.'
 ```
 
-### Required Secrets
+---
 
-| Secret | Description |
-|--------|-------------|
-| `ETHERSCAN_API_KEY` | [Get free key](https://etherscan.io/apis) |
-| `OPENROUTER_API_KEY` | Optional — enables AI explanations via Mistral |
+## Required Secrets
+
+| Secret              | Description                                                      |
+| ------------------- | ---------------------------------------------------------------- |
+| `ETHERSCAN_API_KEY` | Fetches live gas price                                           |
+| `NVIDIA_API_KEY`    | Optional — enables AI explanation                                |
+| `ALCHEMY_RPC_URL`   | Optional — enables mainnet forking for advanced contract testing |
 
 `GITHUB_TOKEN` is provided automatically by GitHub Actions.
 
 ---
 
+## 🔑 Demo API Keys (For Judges Only)
+
+For quick testing, you can use these temporary keys:
+
+```
+ETHERSCAN_API_KEY = <FJTP59EC2JKN1X166TGE99NKF8JPBWRK82>
+NVIDIA_API_KEY    = <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>
+ALCHEMY_RPC_URL   = <https://eth-mainnet.g.alchemy.com/v2/sd7D5EnBKTidu8kkEUhCH>
+```
+
+⚠️ These keys are rate-limited and may expire after the hackathon.
+
+---
+
+## 🧠 About ALCHEMY_RPC_URL
+
+`ALCHEMY_RPC_URL` allows ETHRALENS to connect to a live Ethereum node via Alchemy.
+
+This is used for **mainnet forking in Foundry**, which enables:
+
+* Testing contracts against real on-chain state
+* Interacting with live DeFi protocols during tests
+
+👉 Not required for basic usage, but useful for advanced real-world simulations.
+
+---
+
 ## Verdict Logic
 
-| Condition | Verdict |
-|-----------|---------|
+| Condition                        | Verdict                         |
+| -------------------------------- | ------------------------------- |
 | `cost > $5` AND `drop-off > 50%` | 🚫 **DO NOT DEPLOY** — fails CI |
-| `cost > $3` | ⚠️ **OPTIMIZE** — warning |
-| Otherwise | ✅ **SAFE** |
+| `cost > $3`                      | ⚠️ **OPTIMIZE** — warning       |
+| Otherwise                        | ✅ **SAFE**                      |
 
 ## Drop-off Model
 
-| Cost per Tx | Risk Level | User Drop-off |
-|-------------|------------|---------------|
-| < $2.00 | 🟢 LOW | 10% |
-| $2.00 – $5.00 | 🟡 MEDIUM | 40% |
-| > $5.00 | 🔴 HIGH | 70% |
+| Cost per Tx   | Risk Level | User Drop-off |
+| ------------- | ---------- | ------------- |
+| < $2.00       | 🟢 LOW     | 10%           |
+| $2.00 – $5.00 | 🟡 MEDIUM  | 40%           |
+| > $5.00       | 🔴 HIGH    | 70%           |
 
 ---
 
@@ -117,7 +147,7 @@ ethralens-action/
 └── utils/
     ├── fetchGas.js     — Etherscan gas price API
     ├── fetchETH.js     — CoinGecko ETH price API
-    ├── fetchAI.js      — Optional Mistral explanation via OpenRouter
+    ├── fetchAI.js      — NVIDIA AI explanation (optional)
     └── formatter.js    — Markdown PR comment builder
 ```
 
