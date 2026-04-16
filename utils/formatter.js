@@ -1,30 +1,11 @@
 'use strict';
 
-const VERDICT_LABEL = {
-  DO_NOT_DEPLOY : '🚫 DO NOT DEPLOY',
-  OPTIMIZE      : '⚠️  OPTIMIZE',
-  SAFE          : '✅ SAFE',
-};
-
 const RISK_ICON = {
   LOW    : '🟢',
   MEDIUM : '🟡',
   HIGH   : '🔴',
 };
 
-/**
- * Builds a Markdown PR comment report.
- *
- * @param {object}   opts
- * @param {number}   opts.costPerTx      - Cost per tx in USD
- * @param {object}   opts.simulation     - Output from simulate()
- * @param {object}   opts.risk           - Output from assessRisk()
- * @param {string}   opts.verdict        - Output from decide()
- * @param {object}   opts.gasData        - { gasPriceGwei, ethPriceUSD }
- * @param {[string, number][]} opts.topFunctions - Sorted [fn, avgGas] pairs
- * @param {string|null} opts.aiNote      - Optional AI explanation string
- * @returns {string} Rendered Markdown
- */
 function formatReport({ costPerTx, simulation, risk, verdict, gasData, topFunctions, aiNote }) {
   const { gasPriceGwei, ethPriceUSD } = gasData;
 
@@ -76,16 +57,24 @@ function formatReport({ costPerTx, simulation, risk, verdict, gasData, topFuncti
     '',
     '---',
     '',
-    `### FINAL VERDICT: ${VERDICT_LABEL[verdict]}`,
+    `### FINAL VERDICT: ${verdict}`,
     '',
   ];
 
   // Optional AI section
   if (aiNote) {
+    let modelName = 'OpenRouter Auto';
+    const match = aiNote.match(/^\*\([^)]+\)\*/);
+    
+    if (match) {
+      modelName = match[0].replace(/\*\((🤖 )?|\)\*/g, '').trim();
+      aiNote = aiNote.replace(/^\*\([^)]+\)\*\s*\n/, '');
+    }
+
     lines.push(
       '---',
       '',
-      '### 🤖 AI Analysis *(Mistral)*',
+      `### 🤖 AI Analysis *(${modelName})*`,
       '',
       `> ${aiNote}`,
       '',

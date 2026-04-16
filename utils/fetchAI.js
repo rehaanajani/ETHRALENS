@@ -7,11 +7,11 @@ const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
  * All zero-cost on OpenRouter as of 2025.
  */
 const MODELS = [
-  'openrouter/auto',               // #1 — OpenRouter auto-routes to best free available
-  'deepseek/deepseek-r1:free',     // #2 — DeepSeek R1: best free reasoning model
-  'nvidia/llama-3.1-nemotron-70b-instruct:free', // #3 — NVIDIA Nemotron 70B, 256k ctx
-  'meta-llama/llama-3.3-70b-instruct:free',      // #4 — Llama 3.3 70B fallback
-  'mistralai/mistral-7b-instruct:free',           // #5 — lightweight last resort
+  'deepseek/deepseek-r1:free',                   // #1 — DeepSeek R1: best free reasoning model
+  'nvidia/llama-3.1-nemotron-70b-instruct:free', // #2 — NVIDIA Nemotron 70B, 256k ctx
+  'meta-llama/llama-3.3-70b-instruct:free',      // #3 — Llama 3.3 70B fallback
+  'mistralai/mistral-7b-instruct:free',          // #4 — lightweight fallback
+  'openrouter/auto',                             // #5 — OpenRouter Auto (moved to last)
 ];
 
 /**
@@ -31,17 +31,17 @@ const MODELS = [
 async function fetchAIExplanation(summary, apiKey) {
   if (!apiKey) return null;
 
-  const prompt = [
-    `You are a smart contract gas optimization expert.`,
-    `Respond in exactly 2 sentences: first explain the economic risk to end users, then give the single most impactful code optimization to reduce gas.`,
-    `Be specific about the function name and what to change.`,
-    ``,
-    `Verdict:        ${summary.verdict}`,
-    `Cost per tx:    $${summary.costPerTx.toFixed(4)}`,
-    `Risk level:     ${summary.riskLevel}`,
-    `User drop-off:  ${(summary.dropRate * 100).toFixed(0)}%`,
-    `Worst function: ${summary.worstFn} (${summary.worstGas.toLocaleString()} gas)`,
-  ].join('\n');
+  const prompt = `You are a smart contract gas optimization expert auditor.
+Please review the following metrics.
+Function: ${summary.worstFn}
+Gas Used: ${summary.worstGas.toLocaleString()}
+Cost/Tx: $${summary.costPerTx.toFixed(4)}
+Risk Level: ${summary.riskLevel}
+Drop-off: ${(summary.dropRate * 100).toFixed(0)}%
+
+Respond in exactly 2 sentences:
+1. Explain the economic risk to end users.
+2. Give the single most impactful code optimization to reduce gas.`;
 
   for (const model of MODELS) {
     try {
@@ -56,7 +56,7 @@ async function fetchAIExplanation(summary, apiKey) {
         body  : JSON.stringify({
           model      : model,
           messages   : [{ role: 'user', content: prompt }],
-          max_tokens : 180,
+          max_tokens : 250,
           temperature: 0.3,
         }),
         signal: AbortSignal.timeout(20_000),
@@ -89,8 +89,8 @@ async function fetchAIExplanation(summary, apiKey) {
     }
   }
 
-  console.warn('[ETHRALENS AI] All models failed — skipping AI section.');
-  return null; // Non-fatal — pipeline continues without AI note
+  console.warn('[ETHRALENS AI] All models failed — using fallback string.');
+  return `*(🤖 OpenRouter Auto)*  \nAI analysis could not be generated at this time.`;
 }
 
 module.exports = { fetchAIExplanation };

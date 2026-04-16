@@ -34,26 +34,22 @@ module.exports = { computeCostUSD };
 
 
 const VERDICTS = Object.freeze({
-  DO_NOT_DEPLOY : 'DO_NOT_DEPLOY',
-  OPTIMIZE      : 'OPTIMIZE',
-  SAFE          : 'SAFE',
+  DO_NOT_DEPLOY : '🚫 DO NOT DEPLOY',
+  OPTIMIZE      : '⚠️ OPTIMIZE',
+  SAFE          : '✅ SAFE',
 });
 
 /**
- * Determines the final deployment verdict.
+ * Determines the final deployment verdict based on risk level.
  *
- * Rules (in priority order):
- *   1. cost > $5 AND dropRate > 50%  → DO NOT DEPLOY
- *   2. cost > $3                     → OPTIMIZE
- *   3. otherwise                     → SAFE
- *
- * @param {number} costPerTx - Cost per transaction in USD
- * @param {number} dropRate  - User drop-off fraction (e.g. 0.70)
- * @returns {'DO_NOT_DEPLOY' | 'OPTIMIZE' | 'SAFE'}
+ * @param {object} args
+ * @param {string} args.riskLevel - LOW | MEDIUM | HIGH
+ * @param {number} args.costUSD   - Optional costUSD passed from caller just in case
+ * @returns {string} The formatted verdict label
  */
-function decide(costPerTx, dropRate) {
-  if (costPerTx > 1)   return VERDICTS.DO_NOT_DEPLOY;
-  if (costPerTx > 0.5) return VERDICTS.OPTIMIZE;
+function decide({ riskLevel, costUSD }) {
+  if (riskLevel === 'HIGH')   return VERDICTS.DO_NOT_DEPLOY;
+  if (riskLevel === 'MEDIUM') return VERDICTS.OPTIMIZE;
   return VERDICTS.SAFE;
 }
 
@@ -30153,11 +30149,11 @@ const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
  * All zero-cost on OpenRouter as of 2025.
  */
 const MODELS = [
-  'openrouter/auto',               // #1 — OpenRouter auto-routes to best free available
-  'deepseek/deepseek-r1:free',     // #2 — DeepSeek R1: best free reasoning model
-  'nvidia/llama-3.1-nemotron-70b-instruct:free', // #3 — NVIDIA Nemotron 70B, 256k ctx
-  'meta-llama/llama-3.3-70b-instruct:free',      // #4 — Llama 3.3 70B fallback
-  'mistralai/mistral-7b-instruct:free',           // #5 — lightweight last resort
+  'deepseek/deepseek-r1:free',                   // #1 — DeepSeek R1: best free reasoning model
+  'nvidia/llama-3.1-nemotron-70b-instruct:free', // #2 — NVIDIA Nemotron 70B, 256k ctx
+  'meta-llama/llama-3.3-70b-instruct:free',      // #3 — Llama 3.3 70B fallback
+  'mistralai/mistral-7b-instruct:free',          // #4 — lightweight fallback
+  'openrouter/auto',                             // #5 — OpenRouter Auto (moved to last)
 ];
 
 /**
@@ -30177,17 +30173,17 @@ const MODELS = [
 async function fetchAIExplanation(summary, apiKey) {
   if (!apiKey) return null;
 
-  const prompt = [
-    `You are a smart contract gas optimization expert.`,
-    `Respond in exactly 2 sentences: first explain the economic risk to end users, then give the single most impactful code optimization to reduce gas.`,
-    `Be specific about the function name and what to change.`,
-    ``,
-    `Verdict:        ${summary.verdict}`,
-    `Cost per tx:    $${summary.costPerTx.toFixed(4)}`,
-    `Risk level:     ${summary.riskLevel}`,
-    `User drop-off:  ${(summary.dropRate * 100).toFixed(0)}%`,
-    `Worst function: ${summary.worstFn} (${summary.worstGas.toLocaleString()} gas)`,
-  ].join('\n');
+  const prompt = `You are a smart contract gas optimization expert auditor.
+Please review the following metrics.
+Function: ${summary.worstFn}
+Gas Used: ${summary.worstGas.toLocaleString()}
+Cost/Tx: $${summary.costPerTx.toFixed(4)}
+Risk Level: ${summary.riskLevel}
+Drop-off: ${(summary.dropRate * 100).toFixed(0)}%
+
+Respond in exactly 2 sentences:
+1. Explain the economic risk to end users.
+2. Give the single most impactful code optimization to reduce gas.`;
 
   for (const model of MODELS) {
     try {
@@ -30202,7 +30198,7 @@ async function fetchAIExplanation(summary, apiKey) {
         body  : JSON.stringify({
           model      : model,
           messages   : [{ role: 'user', content: prompt }],
-          max_tokens : 180,
+          max_tokens : 250,
           temperature: 0.3,
         }),
         signal: AbortSignal.timeout(20_000),
@@ -30235,8 +30231,8 @@ async function fetchAIExplanation(summary, apiKey) {
     }
   }
 
-  console.warn('[ETHRALENS AI] All models failed — skipping AI section.');
-  return null; // Non-fatal — pipeline continues without AI note
+  console.warn('[ETHRALENS AI] All models failed — using fallback string.');
+  return `*(🤖 OpenRouter Auto)*  \nAI analysis could not be generated at this time.`;
 }
 
 module.exports = { fetchAIExplanation };
@@ -30347,31 +30343,12 @@ module.exports = { fetchGasPrice };
 "use strict";
 
 
-const VERDICT_LABEL = {
-  DO_NOT_DEPLOY : '🚫 DO NOT DEPLOY',
-  OPTIMIZE      : '⚠️  OPTIMIZE',
-  SAFE          : '✅ SAFE',
-};
-
 const RISK_ICON = {
   LOW    : '🟢',
   MEDIUM : '🟡',
   HIGH   : '🔴',
 };
 
-/**
- * Builds a Markdown PR comment report.
- *
- * @param {object}   opts
- * @param {number}   opts.costPerTx      - Cost per tx in USD
- * @param {object}   opts.simulation     - Output from simulate()
- * @param {object}   opts.risk           - Output from assessRisk()
- * @param {string}   opts.verdict        - Output from decide()
- * @param {object}   opts.gasData        - { gasPriceGwei, ethPriceUSD }
- * @param {[string, number][]} opts.topFunctions - Sorted [fn, avgGas] pairs
- * @param {string|null} opts.aiNote      - Optional AI explanation string
- * @returns {string} Rendered Markdown
- */
 function formatReport({ costPerTx, simulation, risk, verdict, gasData, topFunctions, aiNote }) {
   const { gasPriceGwei, ethPriceUSD } = gasData;
 
@@ -30423,16 +30400,24 @@ function formatReport({ costPerTx, simulation, risk, verdict, gasData, topFuncti
     '',
     '---',
     '',
-    `### FINAL VERDICT: ${VERDICT_LABEL[verdict]}`,
+    `### FINAL VERDICT: ${verdict}`,
     '',
   ];
 
   // Optional AI section
   if (aiNote) {
+    let modelName = 'OpenRouter Auto';
+    const match = aiNote.match(/^\*\([^)]+\)\*/);
+    
+    if (match) {
+      modelName = match[0].replace(/\*\((🤖 )?|\)\*/g, '').trim();
+      aiNote = aiNote.replace(/^\*\([^)]+\)\*\s*\n/, '');
+    }
+
     lines.push(
       '---',
       '',
-      '### 🤖 AI Analysis *(Mistral)*',
+      `### 🤖 AI Analysis *(${modelName})*`,
       '',
       `> ${aiNote}`,
       '',
@@ -32467,13 +32452,13 @@ async function run() {
     core.info(`🔍 Risk: ${risk.riskLevel} | Drop-off: ${(risk.dropRate * 100).toFixed(0)}%`);
 
     // ── Step 7: Decision ────────────────────────────────────────────────────
-    const verdict = decide(costPerTx, risk.dropRate);
+    const verdict = decide({ riskLevel: risk.riskLevel, costUSD: costPerTx });
     core.info(`⚖️  Verdict: ${verdict}`);
 
     // ── Step 8 (optional): AI explanation ───────────────────────────────────
     let aiNote = null;
     if (openrouterKey) {
-      core.startGroup('🤖 Requesting AI analysis (Mistral)');
+      core.startGroup('🤖 Requesting AI analysis (OpenRouter)');
       aiNote = await fetchAIExplanation(
         { verdict, costPerTx, riskLevel: risk.riskLevel, dropRate: risk.dropRate, worstFn, worstGas },
         openrouterKey

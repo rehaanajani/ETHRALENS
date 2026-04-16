@@ -97,13 +97,13 @@ async function run() {
     core.info(`🔍 Risk: ${risk.riskLevel} | Drop-off: ${(risk.dropRate * 100).toFixed(0)}%`);
 
     // ── Step 7: Decision ────────────────────────────────────────────────────
-    const verdict = decide(costPerTx, risk.dropRate);
+    const verdict = decide({ riskLevel: risk.riskLevel, costUSD: costPerTx });
     core.info(`⚖️  Verdict: ${verdict}`);
 
     // ── Step 8 (optional): AI explanation ───────────────────────────────────
     let aiNote = null;
     if (openrouterKey) {
-      core.startGroup('🤖 Requesting AI analysis (Mistral)');
+      core.startGroup('🤖 Requesting AI analysis (OpenRouter)');
       aiNote = await fetchAIExplanation(
         { verdict, costPerTx, riskLevel: risk.riskLevel, dropRate: risk.dropRate, worstFn, worstGas },
         openrouterKey

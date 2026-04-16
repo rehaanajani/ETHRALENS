@@ -1,26 +1,22 @@
 'use strict';
 
 const VERDICTS = Object.freeze({
-  DO_NOT_DEPLOY : 'DO_NOT_DEPLOY',
-  OPTIMIZE      : 'OPTIMIZE',
-  SAFE          : 'SAFE',
+  DO_NOT_DEPLOY : '🚫 DO NOT DEPLOY',
+  OPTIMIZE      : '⚠️ OPTIMIZE',
+  SAFE          : '✅ SAFE',
 });
 
 /**
- * Determines the final deployment verdict.
+ * Determines the final deployment verdict based on risk level.
  *
- * Rules (in priority order):
- *   1. cost > $5 AND dropRate > 50%  → DO NOT DEPLOY
- *   2. cost > $3                     → OPTIMIZE
- *   3. otherwise                     → SAFE
- *
- * @param {number} costPerTx - Cost per transaction in USD
- * @param {number} dropRate  - User drop-off fraction (e.g. 0.70)
- * @returns {'DO_NOT_DEPLOY' | 'OPTIMIZE' | 'SAFE'}
+ * @param {object} args
+ * @param {string} args.riskLevel - LOW | MEDIUM | HIGH
+ * @param {number} args.costUSD   - Optional costUSD passed from caller just in case
+ * @returns {string} The formatted verdict label
  */
-function decide(costPerTx, dropRate) {
-  if (costPerTx > 1)   return VERDICTS.DO_NOT_DEPLOY;
-  if (costPerTx > 0.5) return VERDICTS.OPTIMIZE;
+function decide({ riskLevel, costUSD }) {
+  if (riskLevel === 'HIGH')   return VERDICTS.DO_NOT_DEPLOY;
+  if (riskLevel === 'MEDIUM') return VERDICTS.OPTIMIZE;
   return VERDICTS.SAFE;
 }
 
