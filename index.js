@@ -93,7 +93,7 @@ async function run() {
     core.info(`📈 Monthly cost @ scale: $${simulation.monthlyCost.toFixed(2)}`);
 
     // ── Step 6: Risk assessment ─────────────────────────────────────────────
-    const risk = assessRisk(costPerTx);
+    const risk = assessRisk(costPerTx, worstGas);
     core.info(`🔍 Risk: ${risk.riskLevel} | Drop-off: ${(risk.dropRate * 100).toFixed(0)}%`);
 
     // ── Step 7: Decision ────────────────────────────────────────────────────

@@ -144,32 +144,30 @@ module.exports = { parseGasReport };
 
 
 /**
- * Risk tiers:
- *   LOW    → cost < $2    → 10% user drop-off
- *   MEDIUM → $2 ≤ cost ≤ $5 → 40% user drop-off
- *   HIGH   → cost > $5   → 70% user drop-off
+ * Risk tiers — evaluated on BOTH dollar cost AND raw gas units.
+ * Gas-unit thresholds catch architecturally wasteful contracts even
+ * when network fees are temporarily low.
  *
- * Breakpoint: the next cost threshold that would push into a higher tier,
- * or the current cost if already HIGH.
+ *   HIGH   → cost > $5   OR  gasUnits > 100,000  → 🚫 DO NOT DEPLOY
+ *   MEDIUM → cost ≥ $2   OR  gasUnits > 50,000   → ⚠️ OPTIMIZE
+ *   LOW    → otherwise                             → ✅ SAFE
  *
  * @param {number} costPerTx - Cost per transaction in USD
- * @returns {{
- *   riskLevel:  'LOW' | 'MEDIUM' | 'HIGH',
- *   dropRate:   number,   // fraction, e.g. 0.10
- *   breakpoint: number    // USD threshold
- * }}
+ * @param {number} gasUnits  - Raw gas units consumed by worst function
+ * @returns {{ riskLevel: 'LOW'|'MEDIUM'|'HIGH', dropRate: number, breakpoint: number }}
  */
-function assessRisk(costPerTx) {
-  if (costPerTx < 2) {
-    return { riskLevel: 'LOW',    dropRate: 0.10, breakpoint: 2.00 };
+function assessRisk(costPerTx, gasUnits = 0) {
+  if (costPerTx > 5 || gasUnits > 100_000) {
+    return { riskLevel: 'HIGH',   dropRate: 0.70, breakpoint: costPerTx };
   }
-  if (costPerTx <= 5) {
+  if (costPerTx >= 2 || gasUnits > 50_000) {
     return { riskLevel: 'MEDIUM', dropRate: 0.40, breakpoint: 5.00 };
   }
-  return   { riskLevel: 'HIGH',   dropRate: 0.70, breakpoint: costPerTx };
+  return   { riskLevel: 'LOW',    dropRate: 0.10, breakpoint: 2.00 };
 }
 
 module.exports = { assessRisk };
+
 
 
 /***/ }),
@@ -32422,7 +32420,7 @@ async function run() {
     core.info(`📈 Monthly cost @ scale: $${simulation.monthlyCost.toFixed(2)}`);
 
     // ── Step 6: Risk assessment ─────────────────────────────────────────────
-    const risk = assessRisk(costPerTx);
+    const risk = assessRisk(costPerTx, worstGas);
     core.info(`🔍 Risk: ${risk.riskLevel} | Drop-off: ${(risk.dropRate * 100).toFixed(0)}%`);
 
     // ── Step 7: Decision ────────────────────────────────────────────────────
