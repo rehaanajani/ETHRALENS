@@ -30149,19 +30149,20 @@ function wrappy (fn, cb) {
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 
 /**
- * Model fallback chain — tried in order until one succeeds.
- * All are free on OpenRouter as of 2025.
+ * Free model fallback chain — tried in order until one returns a response.
+ * All zero-cost on OpenRouter as of 2025.
  */
 const MODELS = [
-  'deepseek/deepseek-r1:free',               // #1 — best reasoning, free
-  'meta-llama/llama-3.3-70b-instruct:free',  // #2 — Llama 3.3 70B, very capable
-  'mistralai/mistral-7b-instruct:free',      // #3 — lightweight fallback
+  'openrouter/auto',               // #1 — OpenRouter auto-routes to best free available
+  'deepseek/deepseek-r1:free',     // #2 — DeepSeek R1: best free reasoning model
+  'nvidia/llama-3.1-nemotron-70b-instruct:free', // #3 — NVIDIA Nemotron 70B, 256k ctx
+  'meta-llama/llama-3.3-70b-instruct:free',      // #4 — Llama 3.3 70B fallback
+  'mistralai/mistral-7b-instruct:free',           // #5 — lightweight last resort
 ];
 
 /**
- * Generates a concise AI economic risk explanation using the best available
- * free model on OpenRouter. Tries models in priority order, returns null
- * if ALL fail — never crashes the pipeline.
+ * Generates a concise AI economic risk explanation via OpenRouter.
+ * Tries free models in priority order. Never crashes the pipeline.
  *
  * @param {object} summary
  * @param {string} summary.verdict      - SAFE | OPTIMIZE | DO_NOT_DEPLOY
@@ -30178,13 +30179,14 @@ async function fetchAIExplanation(summary, apiKey) {
 
   const prompt = [
     `You are a smart contract gas optimization expert.`,
-    `Respond in exactly 2 sentences: first explain the economic risk to users, then give the single most impactful optimization to reduce gas cost.`,
+    `Respond in exactly 2 sentences: first explain the economic risk to end users, then give the single most impactful code optimization to reduce gas.`,
+    `Be specific about the function name and what to change.`,
     ``,
-    `Contract verdict: ${summary.verdict}`,
-    `Cost per transaction: $${summary.costPerTx.toFixed(4)}`,
-    `Risk level: ${summary.riskLevel}`,
-    `User drop-off rate: ${(summary.dropRate * 100).toFixed(0)}%`,
-    `Most expensive function: ${summary.worstFn} (${summary.worstGas.toLocaleString()} gas)`,
+    `Verdict:        ${summary.verdict}`,
+    `Cost per tx:    $${summary.costPerTx.toFixed(4)}`,
+    `Risk level:     ${summary.riskLevel}`,
+    `User drop-off:  ${(summary.dropRate * 100).toFixed(0)}%`,
+    `Worst function: ${summary.worstFn} (${summary.worstGas.toLocaleString()} gas)`,
   ].join('\n');
 
   for (const model of MODELS) {
@@ -30200,27 +30202,41 @@ async function fetchAIExplanation(summary, apiKey) {
         body  : JSON.stringify({
           model      : model,
           messages   : [{ role: 'user', content: prompt }],
-          max_tokens : 150,
+          max_tokens : 180,
           temperature: 0.3,
         }),
         signal: AbortSignal.timeout(20_000),
       });
 
-      if (!res.ok) continue; // try next model
+      if (!res.ok) {
+        console.warn(`[ETHRALENS AI] ${model} → HTTP ${res.status}, trying next...`);
+        continue;
+      }
 
       const data = await res.json();
+
+      // Check for API-level errors (e.g. model not found, insufficient credits)
+      if (data.error) {
+        console.warn(`[ETHRALENS AI] ${model} → ${data.error.message}, trying next...`);
+        continue;
+      }
+
       const text = data?.choices?.[0]?.message?.content?.trim();
 
-      if (text) {
-        console.log(`[ETHRALENS AI] Used model: ${model}`);
-        return `*(${model.split('/')[1]})*  \n${text}`;
+      if (text && text.length > 10) {
+        // Show which model actually responded
+        const shortName = model.split('/').pop().replace(':free', '');
+        console.log(`[ETHRALENS AI] ✅ Response from: ${model}`);
+        return `*(🤖 ${shortName})*  \n${text}`;
       }
-    } catch {
-      // timeout or network error — try next model
+
+    } catch (err) {
+      console.warn(`[ETHRALENS AI] ${model} → ${err.message}, trying next...`);
     }
   }
 
-  return null; // all models failed — non-fatal
+  console.warn('[ETHRALENS AI] All models failed — skipping AI section.');
+  return null; // Non-fatal — pipeline continues without AI note
 }
 
 module.exports = { fetchAIExplanation };
