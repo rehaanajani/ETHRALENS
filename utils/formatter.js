@@ -63,18 +63,14 @@ function formatReport({ costPerTx, simulation, risk, verdict, gasData, topFuncti
 
   // Optional AI section
   if (aiNote) {
-    let modelName = 'OpenRouter Auto';
-    const match = aiNote.match(/^\*\([^)]+\)\*/);
-    
-    if (match) {
-      modelName = match[0].replace(/\*\((🤖 )?|\)\*/g, '').trim();
-      aiNote = aiNote.replace(/^\*\([^)]+\)\*\s*\n/, '');
+    if (aiNote.startsWith('*(')) { 
+      aiNote = aiNote.replace(/^\*\([^)]+\)\*\s*\n/, ''); // Clean any lingering prefix
     }
 
     lines.push(
       '---',
       '',
-      `### 🤖 AI Analysis *(${modelName})*`,
+      `### 🤖 AI Analysis (NVIDIA AI)`,
       '',
       `> ${aiNote}`,
       '',

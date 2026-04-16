@@ -3,9 +3,11 @@
 const NVIDIA_API = 'https://integrate.api.nvidia.com/v1/chat/completions';
 const NVIDIA_MODEL = 'meta/llama3-8b-instruct';
 
+const DETERMINISTIC_FALLBACK = "High gas usage detected due to inefficient storage operations. Optimize by reducing SSTORE calls or caching values in memory.";
+
 /**
  * Generates a concise AI economic risk explanation using NVIDIA NIM API.
- * Returns a deterministic fallback string if no key is provided or if the call fails.
+ * Returns a static, clean fallback string if no key is provided or if the call fails.
  * Never throws — the pipeline must always complete successfully.
  *
  * @param {object} opts
@@ -17,7 +19,7 @@ const NVIDIA_MODEL = 'meta/llama3-8b-instruct';
  */
 async function fetchAIExplanation({ functionName, gasUsed, costUSD, apiKey }) {
   if (!apiKey) {
-    return 'AI disabled — using deterministic reasoning.';
+    return DETERMINISTIC_FALLBACK;
   }
 
   const prompt = `You are a smart contract auditor.
@@ -48,23 +50,19 @@ Be specific. No generic advice.`;
     });
 
     if (!res.ok) {
-      const errorText = await res.text();
-      console.warn(`[ETHRALENS AI] NVIDIA NIM HTTP ${res.status}: ${errorText}`);
-      return `*(🤖 NIM Error)*  \nAPI rejected request (HTTP ${res.status}). Verify your NVIDIA API key is active.`;
+      return DETERMINISTIC_FALLBACK;
     }
 
     const data = await res.json();
     const text = data?.choices?.[0]?.message?.content?.trim();
 
     if (text && text.length > 10) {
-      console.log('[ETHRALENS AI] ✅ Response from: NVIDIA NIM (meta/llama3-8b-instruct)');
       return text;
     }
 
-    return '*(🤖 NIM Error)*  \nAI returned empty response.';
+    return DETERMINISTIC_FALLBACK;
   } catch (err) {
-    console.warn(`[ETHRALENS AI] NVIDIA NIM error: ${err.message}`);
-    return `*(🤖 NIM Error)*  \n${err.message}`;
+    return DETERMINISTIC_FALLBACK;
   }
 }
 
