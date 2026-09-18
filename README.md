@@ -86,17 +86,20 @@ jobs:
 
 ---
 
-## 🔑 Demo API Keys (For Judges Only)
+## 🔑 API Keys
 
-For quick testing, you can use these temporary keys:
+Supply your own keys as repository secrets. Nothing is committed to this repo.
 
 ```
-ETHERSCAN_API_KEY = <FJTP59EC2JKN1X166TGE99NKF8JPBWRK82>
-NVIDIA_API_KEY    = <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>
-ALCHEMY_RPC_URL   = <https://eth-mainnet.g.alchemy.com/v2/sd7D5EnBKTidu8kkEUhCH>
+ETHERSCAN_API_KEY = <your Etherscan API key>
+NVIDIA_API_KEY    = <your NVIDIA API key>   # optional, enables AI explanations
+ALCHEMY_RPC_URL   = <your Alchemy mainnet RPC URL>   # optional, enables forking
 ```
 
-⚠️ These keys are rate-limited and may expire after the hackathon.
+Get them free at [etherscan.io/apis](https://etherscan.io/apis),
+[build.nvidia.com](https://build.nvidia.com) and [alchemy.com](https://www.alchemy.com).
+
+⚠️ Never commit real keys. The demo keys previously listed here have been revoked.
 
 ---
 
