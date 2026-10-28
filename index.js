@@ -20,6 +20,43 @@ const { fetchETHPrice }     = require('./utils/fetchETH');
 const { fetchAIExplanation} = require('./utils/fetchAI');
 const { formatReport }      = require('./utils/formatter');
 
+// Hidden marker so later runs can find and update their own comment
+const COMMENT_MARKER = '<!-- ethralens-report -->';
+
+/**
+ * Post the report on the PR, editing the previous ETHRALENS comment if there
+ * is one so repeated pushes don't stack up duplicate reports.
+ */
+async function upsertPRComment(token, report) {
+  const { context } = github;
+  if (!context.payload.pull_request) {
+    core.info('Not a pull_request event — skipping PR comment.');
+    return;
+  }
+
+  const body = `${COMMENT_MARKER}\n${report}`;
+  const { owner, repo } = context.repo;
+  const issue_number = context.payload.pull_request.number;
+
+  try {
+    const octokit  = github.getOctokit(token);
+    const comments = await octokit.paginate(octokit.rest.issues.listComments, {
+      owner, repo, issue_number, per_page: 100,
+    });
+    const existing = comments.find((c) => c.body?.includes(COMMENT_MARKER));
+
+    if (existing) {
+      await octokit.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+      core.info('✅ PR comment updated.');
+    } else {
+      await octokit.rest.issues.createComment({ owner, repo, issue_number, body });
+      core.info('✅ PR comment posted.');
+    }
+  } catch (e) {
+    core.warning(`Failed to post PR comment: ${e.message}`);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function run() {
@@ -129,23 +166,8 @@ async function run() {
 
     core.info('\n' + report);
 
-    // ── Step 10: Post PR comment ─────────────────────────────────────────────
-    try {
-      const github = require("@actions/github");
-      const token = core.getInput("github_token");
-      const octokit = github.getOctokit(token);
-      const context = github.context;
-
-      await octokit.rest.issues.createComment({
-        issue_number: context.issue.number,
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        body: report
-      });
-      core.info('✅ PR comment posted.');
-    } catch (e) {
-      console.log("Failed to post PR comment", e.message);
-    }
+    // ── Step 10: Post (or update) the PR comment ─────────────────────────────
+    await upsertPRComment(githubToken, report);
 
     // ── Step 11: Set outputs ─────────────────────────────────────────────────
     core.setOutput('verdict',     verdict);
