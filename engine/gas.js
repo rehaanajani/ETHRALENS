@@ -39,6 +39,10 @@ function parseGasReport(output) {
     }
   }
 
+  // The table reports the contract's own functions. Test-function gas includes
+  // setup and several calls, so only fall back to it when there is no table.
+  if (Object.keys(results).length > 0) return results;
+
   // ── Strategy 2: Individual test result lines ──────────────────────────────
   // [PASS] test_Deposit() (gas: 63891)
   // [FAIL] test_Withdraw() (gas: 9123)
