@@ -31,7 +31,7 @@ forge test --gas-report
   Decision engine → SAFE / OPTIMIZE / DO NOT DEPLOY
         │
         ▼
-  Post PR comment + (optionally) fail CI
+  Post (or update) the PR comment + (optionally) fail CI
 ```
 
 ---
@@ -152,7 +152,20 @@ ethralens-action/
     ├── fetchETH.js     — CoinGecko ETH price API
     ├── fetchAI.js      — NVIDIA AI explanation (optional)
     └── formatter.js    — Markdown PR comment builder
+tests/                  — node:test unit tests (Foundry tests live in test/)
 ```
+
+---
+
+## Development
+
+```bash
+npm install
+npm test              # unit tests for the parser, cost/risk engine and formatter
+npm run build         # rebuild dist/ — CI fails if it is out of date
+```
+
+ETHRALENS keeps a single report comment per PR and edits it on every push, so the PR conversation doesn't fill up with old reports.
 
 ---
 
