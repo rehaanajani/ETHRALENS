@@ -1,5 +1,7 @@
 'use strict';
 
+const { computeCostUSD } = require('../engine/cost');
+
 const RISK_ICON = {
   LOW    : '🟢',
   MEDIUM : '🟡',
@@ -21,7 +23,7 @@ function formatReport({ costPerTx, simulation, risk, verdict, gasData, topFuncti
     '| Function | Avg Gas | Cost / Tx |',
     '|----------|--------:|----------:|',
     ...topFunctions.map(([fn, gas]) => {
-      const cost = gas * gasPriceGwei * 1e-9 * ethPriceUSD;
+      const cost = computeCostUSD(gas, gasPriceGwei, ethPriceUSD);
       return `| \`${fn}\` | ${gas.toLocaleString()} | $${cost.toFixed(4)} |`;
     }),
     '',
