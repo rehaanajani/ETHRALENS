@@ -103,6 +103,10 @@ function parseGasReport(output) {
     }
   }
 
+  // The table reports the contract's own functions. Test-function gas includes
+  // setup and several calls, so only fall back to it when there is no table.
+  if (Object.keys(results).length > 0) return results;
+
   // ── Strategy 2: Individual test result lines ──────────────────────────────
   // [PASS] test_Deposit() (gas: 63891)
   // [FAIL] test_Withdraw() (gas: 9123)
@@ -30309,10 +30313,12 @@ module.exports = { fetchGasPrice };
 /***/ }),
 
 /***/ 3532:
-/***/ ((module) => {
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
+
+const { computeCostUSD } = __nccwpck_require__(2282);
 
 const RISK_ICON = {
   LOW    : '🟢',
@@ -30335,7 +30341,7 @@ function formatReport({ costPerTx, simulation, risk, verdict, gasData, topFuncti
     '| Function | Avg Gas | Cost / Tx |',
     '|----------|--------:|----------:|',
     ...topFunctions.map(([fn, gas]) => {
-      const cost = gas * gasPriceGwei * 1e-9 * ethPriceUSD;
+      const cost = computeCostUSD(gas, gasPriceGwei, ethPriceUSD);
       return `| \`${fn}\` | ${gas.toLocaleString()} | $${cost.toFixed(4)} |`;
     }),
     '',
@@ -30386,7 +30392,8 @@ function formatReport({ costPerTx, simulation, risk, verdict, gasData, topFuncti
       '',
       `### 🤖 AI Analysis (NVIDIA AI)`,
       '',
-      `> ${aiNote}`,
+      // Quote every line, or only the first stays inside the blockquote
+      aiNote.trim().split('\n').map((l) => `> ${l}`.trimEnd()).join('\n'),
       '',
     );
   }
@@ -32327,7 +32334,7 @@ const core   = __nccwpck_require__(7484);
 const github = __nccwpck_require__(3228);
 
 // ─── Node built-ins ──────────────────────────────────────────────────────────
-const { execSync } = __nccwpck_require__(5317);
+const { execFileSync } = __nccwpck_require__(5317);
 
 // ─── Engine ──────────────────────────────────────────────────────────────────
 const { parseGasReport }    = __nccwpck_require__(1922);
@@ -32342,6 +32349,43 @@ const { fetchETHPrice }     = __nccwpck_require__(2763);
 const { fetchAIExplanation} = __nccwpck_require__(1148);
 const { formatReport }      = __nccwpck_require__(3532);
 
+// Hidden marker so later runs can find and update their own comment
+const COMMENT_MARKER = '<!-- ethralens-report -->';
+
+/**
+ * Post the report on the PR, editing the previous ETHRALENS comment if there
+ * is one so repeated pushes don't stack up duplicate reports.
+ */
+async function upsertPRComment(token, report) {
+  const { context } = github;
+  if (!context.payload.pull_request) {
+    core.info('Not a pull_request event — skipping PR comment.');
+    return;
+  }
+
+  const body = `${COMMENT_MARKER}\n${report}`;
+  const { owner, repo } = context.repo;
+  const issue_number = context.payload.pull_request.number;
+
+  try {
+    const octokit  = github.getOctokit(token);
+    const comments = await octokit.paginate(octokit.rest.issues.listComments, {
+      owner, repo, issue_number, per_page: 100,
+    });
+    const existing = comments.find((c) => c.body?.includes(COMMENT_MARKER));
+
+    if (existing) {
+      await octokit.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+      core.info('✅ PR comment updated.');
+    } else {
+      await octokit.rest.issues.createComment({ owner, repo, issue_number, body });
+      core.info('✅ PR comment posted.');
+    }
+  } catch (e) {
+    core.warning(`Failed to post PR comment: ${e.message}`);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function run() {
@@ -32353,23 +32397,25 @@ async function run() {
     const nvidiaKey      = core.getInput('nvidia_api_key')      || '';
     const forgePath      = core.getInput('forge_test_path')    || '.';
     const alchemyRpcUrl  = core.getInput('alchemy_rpc_url')    || '';
+    if (alchemyRpcUrl) core.setSecret(alchemyRpcUrl); // RPC URLs often embed an API key
 
     // ── Step 1: Run `forge test --gas-report` ───────────────────────────────
     core.startGroup('⛽ Running forge test --gas-report');
-    const forgeCmd = alchemyRpcUrl
-      ? `forge test --gas-report --fork-url ${alchemyRpcUrl}`
-      : 'forge test --gas-report';
-    core.info(`Command: ${alchemyRpcUrl ? 'forge test --gas-report --fork-url <RPC>' : forgeCmd}`);
+    // Pass args as an array (no shell) so RPC URLs with &, ; or $ are safe
+    const forgeArgs = ['test', '--gas-report'];
+    if (alchemyRpcUrl) forgeArgs.push('--fork-url', alchemyRpcUrl);
+    core.info(`Command: forge test --gas-report${alchemyRpcUrl ? ' --fork-url <RPC>' : ''}`);
     let forgeOutput = '';
     try {
-      forgeOutput = execSync(`${forgeCmd} 2>&1`, {
+      forgeOutput = execFileSync('forge', forgeArgs, {
         cwd     : forgePath,
         encoding: 'utf8',
+        stdio   : ['ignore', 'pipe', 'pipe'],
         maxBuffer: 10 * 1024 * 1024, // 10 MB
       });
     } catch (err) {
       // forge exits non-zero when some tests fail but still emits gas data
-      forgeOutput = err.stdout || err.message || '';
+      forgeOutput = `${err.stdout || ''}${err.stderr || ''}` || err.message || '';
       if (!forgeOutput.toLowerCase().includes('gas')) {
         throw new Error(`forge test produced no gas output.\n\n${forgeOutput}`);
       }
@@ -32449,23 +32495,8 @@ async function run() {
 
     core.info('\n' + report);
 
-    // ── Step 10: Post PR comment ─────────────────────────────────────────────
-    try {
-      const github = __nccwpck_require__(3228);
-      const token = core.getInput("github_token");
-      const octokit = github.getOctokit(token);
-      const context = github.context;
-
-      await octokit.rest.issues.createComment({
-        issue_number: context.issue.number,
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        body: report
-      });
-      core.info('✅ PR comment posted.');
-    } catch (e) {
-      console.log("Failed to post PR comment", e.message);
-    }
+    // ── Step 10: Post (or update) the PR comment ─────────────────────────────
+    await upsertPRComment(githubToken, report);
 
     // ── Step 11: Set outputs ─────────────────────────────────────────────────
     core.setOutput('verdict',     verdict);
