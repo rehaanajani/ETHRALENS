@@ -72,7 +72,8 @@ function formatReport({ costPerTx, simulation, risk, verdict, gasData, topFuncti
       '',
       `### 🤖 AI Analysis (NVIDIA AI)`,
       '',
-      `> ${aiNote}`,
+      // Quote every line, or only the first stays inside the blockquote
+      aiNote.trim().split('\n').map((l) => `> ${l}`.trimEnd()).join('\n'),
       '',
     );
   }
