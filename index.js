@@ -5,7 +5,7 @@ const core   = require('@actions/core');
 const github = require('@actions/github');
 
 // ─── Node built-ins ──────────────────────────────────────────────────────────
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 // ─── Engine ──────────────────────────────────────────────────────────────────
 const { parseGasReport }    = require('./engine/gas');
@@ -31,23 +31,25 @@ async function run() {
     const nvidiaKey      = core.getInput('nvidia_api_key')      || '';
     const forgePath      = core.getInput('forge_test_path')    || '.';
     const alchemyRpcUrl  = core.getInput('alchemy_rpc_url')    || '';
+    if (alchemyRpcUrl) core.setSecret(alchemyRpcUrl); // RPC URLs often embed an API key
 
     // ── Step 1: Run `forge test --gas-report` ───────────────────────────────
     core.startGroup('⛽ Running forge test --gas-report');
-    const forgeCmd = alchemyRpcUrl
-      ? `forge test --gas-report --fork-url ${alchemyRpcUrl}`
-      : 'forge test --gas-report';
-    core.info(`Command: ${alchemyRpcUrl ? 'forge test --gas-report --fork-url <RPC>' : forgeCmd}`);
+    // Pass args as an array (no shell) so RPC URLs with &, ; or $ are safe
+    const forgeArgs = ['test', '--gas-report'];
+    if (alchemyRpcUrl) forgeArgs.push('--fork-url', alchemyRpcUrl);
+    core.info(`Command: forge test --gas-report${alchemyRpcUrl ? ' --fork-url <RPC>' : ''}`);
     let forgeOutput = '';
     try {
-      forgeOutput = execSync(`${forgeCmd} 2>&1`, {
+      forgeOutput = execFileSync('forge', forgeArgs, {
         cwd     : forgePath,
         encoding: 'utf8',
+        stdio   : ['ignore', 'pipe', 'pipe'],
         maxBuffer: 10 * 1024 * 1024, // 10 MB
       });
     } catch (err) {
       // forge exits non-zero when some tests fail but still emits gas data
-      forgeOutput = err.stdout || err.message || '';
+      forgeOutput = `${err.stdout || ''}${err.stderr || ''}` || err.message || '';
       if (!forgeOutput.toLowerCase().includes('gas')) {
         throw new Error(`forge test produced no gas output.\n\n${forgeOutput}`);
       }
