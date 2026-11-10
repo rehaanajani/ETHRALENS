@@ -2,6 +2,10 @@
   "name": "ethralens-action",
   "version": "1.0.0",
   "description": "Autopilot for Smart Contract Economics — gas regression analysis for Solidity projects.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rehaanajani/ETHRALENS.git"
+  },
   "main": "index.js",
   "scripts": {
     "build": "ncc build index.js -o dist --license licenses.txt --quiet",
